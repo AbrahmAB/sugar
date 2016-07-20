@@ -51,6 +51,7 @@ from jarabe.frame.notification import NotificationButton
 from jarabe.frame.notification import NotificationPulsingIcon
 import jarabe.frame
 
+PROJECT_BUNDLE_ID = 'org.sugarlabs.Project'
 
 class ActivityButton(RadioToolButton):
 
@@ -177,7 +178,7 @@ class InviteButton(ToolButton):
             self.emit('remove-invite')
 
     def __clicked_cb(self, button):
-        self.palette.popup(immediate=True, state=Palette.SECONDARY)
+        self.palette.popup(immediate=True)
 
     def __remove_invite_cb(self, palette):
         self.emit('remove-invite')
@@ -220,10 +221,16 @@ class InvitePalette(Palette):
         registry = bundleregistry.get_registry()
         self._bundle = registry.get_bundle(bundle_id)
         if self._bundle:
+
             activity_name = self._bundle.get_name()
+
+            name = self._bundle.get_name()
+        elif invite.get_bundle_id() == PROJECT_BUNDLE_ID:
+            #TODO: icon to be implemented!
+            name = 'Project'
         else:
-            activity_name = bundle_id
-        self.set_primary_text(activity_name)
+            name = bundle_id
+        self.set_primary_text(name)
 
         title = self._invite.get_activity_title()
         if title is not None:

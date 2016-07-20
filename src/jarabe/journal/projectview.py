@@ -13,7 +13,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
-
+import logging
 from gettext import gettext as _
 
 from gi.repository import GObject
@@ -25,6 +25,10 @@ from jarabe.journal.expandedentry import BaseExpandedEntry
 from jarabe.journal.detailview import BackBar
 from jarabe.journal.listview import ListView
 from jarabe.journal import model
+from jarabe.journal.expandedentry import TextView, BuddyList 
+from sugar3.graphics.toolbutton import ToolButton
+from jarabe.journal.projectwrapper import get_project_collab
+from jarabe.view.friendlistpopup import FriendListPopup
 
 from sugar3.graphics.xocolor import XoColor
 from sugar3.graphics import style
@@ -34,6 +38,7 @@ _SERVICE_NAME = 'org.laptop.Activity'
 _SERVICE_PATH = '/org/laptop/Activity'
 _SERVICE_INTERFACE = 'org.laptop.Activity'
 
+PROJECT_BUNDLE_ID = 'org.sugarlabs.Project'
 
 class ProjectView(Gtk.EventBox, BaseExpandedEntry):
 
@@ -66,6 +71,13 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
         self._vbox.pack_start(description_box, False, True,
                               style.DEFAULT_SPACING/3)
 
+        hbox = Gtk.Box(orientation = Gtk.Orientation.HORIZONTAL)
+
+        self._buddy_list = Gtk.VBox()
+        hbox.pack_start(self._buddy_list, True, False, 0)
+        self._vbox.pack_start(hbox, False, True, 0)
+        hbox.show()
+
         self._title.connect('focus-out-event', self._title_focus_out_event_cb)
 
         settings = Gio.Settings('org.sugarlabs.user')
@@ -95,17 +107,78 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
 
     def set_project_metadata(self, project_metadata):
         self.project_metadata = project_metadata
-
+        brom = self._create_buddy_list(self.project_metadata)
+        self._vbox.pack_start(brom, True,True,0)
         description = project_metadata.get('description', '')
         self._description.get_buffer().set_text(description)
         self._title.set_text(project_metadata.get('title', ''))
 
-    def _add_buddy_button_clicked_cb(self, button):
-        #TODO: TO be implemented
-        pass
-
     def _title_focus_out_event_cb(self, entry, event):
         self._update_entry()
+
+    def _add_buddy_button_clicked_cb(self, button):
+        logging.debug('[GSoC]_add_buddy_button_clicked_cb')
+        pop_up = FriendListPopup()
+        pop_up.connect('friend-selected', self.__friend_selected_cb)
+
+    def __friend_selected_cb(self, xyz, selected):
+        buddies = []
+        if not self.project_metadata.get('buddies'):
+            self.project_metadata['buddies'] = []
+        for buddy in selected:
+            self.project_metadata['buddies'].append(
+                (buddy.props.nick, buddy.props.color.to_string()))
+
+        self._get_collab().invite(selected)
+        self._project_buddies(self.project_metadata)
+
+    def _get_collab(self):
+        return get_project_collab(self.project_metadata['activity_id'],
+                                  object_id=self.project_metadata['uid'])
+
+    def _project_buddies(self, metadata):
+        logging.debug('[GSoC]_project_buddies')
+        for child in self._buddy_list.get_children():
+            self._buddy_list.remove(child)
+            # FIXME: self._buddy_list.foreach(self._buddy_list.remove)
+        self._buddy_list.pack_start(self._create_buddy_list(metadata), False, False,
+                                    style.DEFAULT_SPACING)
+        self._buddy_list.show_all()
+        logging.debug('[GSoC]project_buddies ended')                
+
+    def _create_buddy_list(self, metadata):
+        logging.debug('Gotcha!!')
+        self.project_metadata = metadata
+        vbox = Gtk.VBox()
+        vbox.props.spacing = style.DEFAULT_SPACING
+
+        add_buddy_button = ToolButton('list-add') # suggest icon for this
+        add_buddy_button.set_tooltip(_('Add Buddy'))
+        add_buddy_button.connect('clicked',self._add_buddy_button_clicked_cb)
+        vbox.pack_start(add_buddy_button, False, False, style.DEFAULT_SPACING)
+        add_buddy_button.show()
+
+        text = Gtk.Label()
+        text.set_markup('<span foreground="%s">%s</span>' % (
+            style.COLOR_BUTTON_GREY.get_html(), _('Participants:')))
+        halign = Gtk.Alignment.new(0, 0, 0, 0)
+        halign.add(text)
+        vbox.pack_start(halign, False, False, 0)
+
+        if metadata.get('buddies'):
+            #buddies = json.loads(metadata['buddies']).values()
+            buddies = metadata['buddies']
+            logging.debug('[GSoC]buddies are %r' %buddies)
+            #for buddy in metadata['buddies']:
+            #    buddies.append((buddy.nick, buddy.color))
+            vbox.pack_start(BuddyList(buddies), False, False, 0)
+            logging.debug('[GSoC]created_buddy_list ')
+            vbox.show_all()
+            return vbox
+        else:
+            vbox.show()
+            return vbox
+
 
     def _create_description(self):
         widget = TextView()
