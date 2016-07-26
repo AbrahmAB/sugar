@@ -186,6 +186,7 @@ class _Account(GObject.GObject):
         GObject.GObject.__init__(self)
 
         self.object_path = account_path
+        logging.debug('account_path:%s' %account_path)
 
         self._connection = None
         self._buddy_handles = {}
@@ -319,7 +320,7 @@ class _Account(GObject.GObject):
 
     def __get_self_handle_cb(self, self_handle):
         self._self_handle = self_handle
-
+        logging.debug('_Account.handle = %s' % self._self_handle)
         if CONNECTION_INTERFACE_CONTACT_CAPABILITIES in self._connection:
             interface = CONNECTION_INTERFACE_CONTACT_CAPABILITIES
             connection = self._connection[interface]
@@ -1100,48 +1101,118 @@ def get_model():
         _model = Neighborhood()
     return _model
 
+
+import avahi, socket
+from dbus.mainloop.glib import DBusGMainLoop
 #Trying avahi..
 def go_avahi():
-    import dbus,  avahi
-    from dbus import DBusException
-    from gi.repository import GLib
+    logging.debug('Go for avahi!!')
+    discovery = AvahiServiceDiscovery()
+    discovery.run()
+    publisher = AvahiServicePublisher()
+    #TODO: get the port number of other users :)
+    #publisher.publish(name="Abhijit", port=300, domain='', txt="try=avahi")
 
-    # Looks for iTunes shares
 
-    TYPE = '_osc._udp'
-
-    def service_resolved(*args):
-        print 'service resolved'
-        print 'name:', args[2]
-        print 'address:', args[7]
-        print 'port:', args[8]
-
-    def print_error(*args):
-        print 'error_handler'
-        print args[0]
+class AvahiObject():
+    '''
+    It create the link through dbus to
+    communicate with the avahi daemon.
+    '''
     
-    def myhandler(interface, protocol, name, stype, domain, flags):
-        print "Found service '%s' type '%s' domain '%s' " % (name, stype, domain)
+    def __init__(self):
+        self.__loop = DBusGMainLoop()
+        self._bus = dbus.SystemBus(mainloop = self.__loop)
+        self._iface = dbus.Interface(
+                                self._bus.get_object(avahi.DBUS_NAME, 
+                                                     avahi.DBUS_PATH_SERVER),
+                                                     avahi.DBUS_INTERFACE_SERVER)
 
-        if flags & avahi.LOOKUP_RESULT_LOCAL:
-                # local service, skip
-                pass
 
-        server.ResolveService(interface, protocol, name, stype, 
-            domain, avahi.PROTO_UNSPEC, dbus.UInt32(0), 
-            reply_handler=service_resolved, error_handler=print_error)
+class AvahiServiceDiscovery(AvahiObject):
+    '''
+    This object represent the main service dicovery.
+    To add or remove service.
+    '''
 
-    
-    print "DOing something"
-    bus = dbus.SystemBus()
-    print "bus made"
-    server = dbus.Interface( bus.get_object(avahi.DBUS_NAME, '/'),
-            'org.freedesktop.Avahi.Server')
-    print "server made"
-    sbrowser = dbus.Interface(bus.get_object(avahi.DBUS_NAME,
-            server.ServiceBrowserNew(avahi.IF_UNSPEC,
-            avahi.PROTO_UNSPEC, TYPE, 'local', dbus.UInt32(0))),
-            avahi.DBUS_INTERFACE_SERVICE_BROWSER)
-    print "sbrowser done"
+    def __init__(self):
+        AvahiObject.__init__(self)
 
-    sbrowser.connect_to_signal("ItemNew", myhandler)
+    def run(self):
+        '''
+        Starts discovery process.
+        '''
+        logging.debug('Starting domain discovery')
+        flg = dbus.UInt32(0)
+        domain = ''
+        service_type = "_ssh._tcp"
+        sbrowser = self._bus.get_object(avahi.DBUS_NAME, \
+                            self._iface.ServiceBrowserNew(avahi.IF_UNSPEC, \
+                            avahi.PROTO_INET, service_type, domain, flg))
+
+        self._siface = dbus.Interface(sbrowser,
+                                      avahi.DBUS_INTERFACE_SERVICE_BROWSER)
+
+        self._siface.connect_to_signal("ItemNew", self.__service_added)
+        self._siface.connect_to_signal("ItemRemove", 
+                                       self.__service_removed)
+
+    def __service_added(self, interface, protocol, name, typ, domain, flags):
+        self._siface.ResolveService(interface, protocol,
+                                    name, typ, domain, avahi.PROTO_UNSPEC,
+                                    dbus.UInt32(0),
+                                    reply_handler = self.__resolve_handler,
+                                    error_handler=self.__resolve_error)
+
+    def __resolve_error(self, msg):
+        logging.warning("avahi error : %s " % (msg))
+
+    def __resolve_handler(self, riface, rproto, rname, rtype, rdomain, rhost,
+                        raproto, raddr, rport, rtxt, rflags):
+        string_txt = avahi.txt_array_to_string_array(rtxt)
+        logging.debug('avahi found something name:%s port:%s txt:%s' % (rname, rport, rtxt))
+
+    def __service_removed(self, rinterface, rprotocol, rname, rtype, 
+                            rdomain, rflags):
+        logging.debug('Removing service')
+
+
+class AvahiServicePublisher(AvahiObject):
+    '''
+    This object represent the publisher for DNSSD Service.
+    '''
+    group = None
+        
+    def publish(self, name, port, domain, txt=None):
+        '''
+        This method publish the service to the avahi daemon.
+        '''
+        self.unpublish()
+        if txt is None:
+            txt = {}
+
+        logging.debug('Starting srevice on port: %s with txt: %s' % (port, txt))
+
+        bus = dbus.SystemBus()
+        grp = dbus.Interface(
+                bus.get_object(avahi.DBUS_NAME,
+                               self._iface.EntryGroupNew()),
+                avahi.DBUS_INTERFACE_ENTRY_GROUP)
+        msg = txt
+        try:
+            avahi.dict_to_txt_array(txt)
+        except:
+            pass
+        grp.AddService(avahi.IF_UNSPEC, avahi.PROTO_UNSPEC, dbus.UInt32(0),
+                       name, "_http._tcp",domain, "",
+                       dbus.UInt16(port), msg)
+        grp.Commit()
+        self.group = grp
+
+    def unpublish(self):
+        """
+        Unpublish the current service.
+        """
+        if self.group is not None:
+            self.group.Reset()
+            self.group = None
