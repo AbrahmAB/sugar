@@ -186,7 +186,6 @@ class _Account(GObject.GObject):
         GObject.GObject.__init__(self)
 
         self.object_path = account_path
-        logging.debug('account_path:%s' %account_path)
 
         self._connection = None
         self._buddy_handles = {}
@@ -320,7 +319,6 @@ class _Account(GObject.GObject):
 
     def __get_self_handle_cb(self, self_handle):
         self._self_handle = self_handle
-        logging.debug('_Account.handle = %s' % self._self_handle)
         if CONNECTION_INTERFACE_CONTACT_CAPABILITIES in self._connection:
             interface = CONNECTION_INTERFACE_CONTACT_CAPABILITIES
             connection = self._connection[interface]
@@ -1102,16 +1100,13 @@ def get_model():
     return _model
 
 
-import avahi, socket
+import avahi
 from dbus.mainloop.glib import DBusGMainLoop
 #Trying avahi..
 def go_avahi():
     logging.debug('Go for avahi!!')
     discovery = AvahiServiceDiscovery()
     discovery.run()
-    publisher = AvahiServicePublisher()
-    #TODO: get the port number of other users :)
-    #publisher.publish(name="Abhijit", port=300, domain='', txt="try=avahi")
 
 
 class AvahiObject():
@@ -1144,8 +1139,8 @@ class AvahiServiceDiscovery(AvahiObject):
         '''
         logging.debug('Starting domain discovery')
         flg = dbus.UInt32(0)
-        domain = ''
-        service_type = "_ssh._tcp"
+        domain = 'local'
+        service_type = "_http._tcp"
         sbrowser = self._bus.get_object(avahi.DBUS_NAME, \
                             self._iface.ServiceBrowserNew(avahi.IF_UNSPEC, \
                             avahi.PROTO_INET, service_type, domain, flg))
@@ -1158,7 +1153,8 @@ class AvahiServiceDiscovery(AvahiObject):
                                        self.__service_removed)
 
     def __service_added(self, interface, protocol, name, typ, domain, flags):
-        self._siface.ResolveService(interface, protocol,
+        logging.debug('Got something avahi!! %s' %(name))
+        self._iface.ResolveService(interface, protocol,
                                     name, typ, domain, avahi.PROTO_UNSPEC,
                                     dbus.UInt32(0),
                                     reply_handler = self.__resolve_handler,
@@ -1169,8 +1165,10 @@ class AvahiServiceDiscovery(AvahiObject):
 
     def __resolve_handler(self, riface, rproto, rname, rtype, rdomain, rhost,
                         raproto, raddr, rport, rtxt, rflags):
-        string_txt = avahi.txt_array_to_string_array(rtxt)
-        logging.debug('avahi found something name:%s port:%s txt:%s' % (rname, rport, rtxt))
+        rev_txt = avahi.txt_array_to_string_array(rtxt)
+        #HACK: rev_txt is char list in reverse. Hence reverse it to extract message
+        string_txt = (''.join(rev_txt))[::-1]
+        logging.debug('avahi found something name:%s port:%s txt:%s' % (rname, rport, string_txt))
 
     def __service_removed(self, rinterface, rprotocol, rname, rtype, 
                             rdomain, rflags):

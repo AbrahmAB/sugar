@@ -23,6 +23,7 @@ import time
 
 from gi.repository import GObject
 from gi.repository import Gtk
+from gi.repository import Gio
 from gi.repository import Gdk
 
 from sugar3.graphics.palette import Palette
@@ -479,6 +480,7 @@ class MainToolbox(ToolbarBox):
         else:
             self._what_widget.show()
             self._what_search_button.show()
+        
         self._update_if_needed()
 
     def __favorite_button_toggled_cb(self, favorite_button):
