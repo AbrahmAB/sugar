@@ -15,6 +15,7 @@
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
 import logging
+import time
 from gettext import gettext as _
 
 from gi.repository import GObject
@@ -114,9 +115,11 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
         nick = settings.get_string('nick')
         icon_color = settings.get_string('color')
         msg = "{ typ=invitation" + ", " \
+                "name=" + nick + ", " \
                 "activity="+PROJECT_BUNDLE_ID + ", " \
                 "title="+self.project_metadata['title']+" }"
-        publisher.publish(name=nick, port=300, domain='local', txt=(msg))
+        name = str(int(time.time()))
+        publisher.publish(name=name, port=300, domain='local', txt=(msg))
 
     def _title_focus_out_event_cb(self, entry, event):
         self._update_entry()
