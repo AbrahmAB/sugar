@@ -1103,6 +1103,7 @@ def get_model():
 
 import avahi
 from dbus.mainloop.glib import DBusGMainLoop
+from sugar3 import profile
 #Trying avahi..
 def go_avahi():
     logging.debug('Go for avahi!!')
@@ -1112,21 +1113,25 @@ def go_avahi():
     settings = Gio.Settings('org.sugarlabs.user')
     nick = settings.get_string('nick')
     icon_color = settings.get_string('color')
-    msg = "{ typ=presence" + ", " \
-            "name=" + nick + ", " \
-            "color="+icon_color+" }"
+    owner_key = profile.get_profile().pubkey
+    msg = "{ typ:presence" + ", " \
+            "nick:" + nick + ", " \
+            "color:"+icon_color+", "\
+            "key:"+owner_key +" }"
     logging.debug('user %r' %list(settings.keys()))
     t = str(int(time.time()))
     publisher.publish(name=t, port=300, domain='local', txt=(msg))
+    return discovery
 
 
-class AvahiObject():
+class AvahiObject(GObject.GObject):
     '''
     It create the link through dbus to
     communicate with the avahi daemon.
     '''
     
     def __init__(self):
+        GObject.GObject.__init__(self)
         self.__loop = DBusGMainLoop()
         self._bus = dbus.SystemBus(mainloop = self.__loop)
         self._iface = dbus.Interface(
@@ -1140,9 +1145,21 @@ class AvahiServiceDiscovery(AvahiObject):
     This object represent the main service dicovery.
     To add or remove service.
     '''
+    __gsignals__ = {
+        'activity-added': (GObject.SignalFlags.RUN_FIRST, None,
+                           ([object])),
+        'activity-removed': (GObject.SignalFlags.RUN_FIRST, None,
+                             ([object])),
+        'buddy-added': (GObject.SignalFlags.RUN_FIRST, None,
+                        ([object])),
+        'buddy-removed': (GObject.SignalFlags.RUN_FIRST, None,
+                          ([object])),
+    }
 
     def __init__(self):
         AvahiObject.__init__(self)
+        self._buddies = {}
+        self._activities = {}
 
     def run(self):
         '''
@@ -1179,10 +1196,39 @@ class AvahiServiceDiscovery(AvahiObject):
         #HACK: rev_txt is char list in reverse. Hence reverse it to extract message
         string_txt = (''.join(rev_txt))[::-1]
         logging.debug('avahi found something name:%s port:%s txt:%s' % (rname, rport, string_txt))
+        kw = {}
+        chk = string_txt.split(', ')
+        for s in chk:
+            m = s.split('{ ')
+            final_str = m[0]
+            if len(m) == 2:
+                s = m[1]
+
+            m = s.split(' }')
+            final_str = m[0]
+            logging.debug('chk this %r' %final_str)
+
+            key, value = final_str.split(':')
+            kw[key] = value
+
+        if kw['key'] == profile.get_profile().pubkey:
+            return
+        
+        buddy = BuddyModel(nick=kw['nick'],
+                           color=XoColor(kw['color']),
+                           key=kw['key'])
+        self._buddies[rname] = buddy
+        self.emit('buddy-added',buddy)
 
     def __service_removed(self, rinterface, rprotocol, rname, rtype, 
                             rdomain, rflags):
         logging.debug('Removing service')
+
+    def get_buddies(self):
+        return self._buddies.values()
+
+    def get_activities(self):
+        return self._activities.values()
 
 
 class AvahiServicePublisher(AvahiObject):
