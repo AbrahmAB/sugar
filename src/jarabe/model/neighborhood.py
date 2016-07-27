@@ -14,6 +14,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import logging
+import time
 from functools import partial
 from hashlib import sha1
 
@@ -1107,6 +1108,16 @@ def go_avahi():
     logging.debug('Go for avahi!!')
     discovery = AvahiServiceDiscovery()
     discovery.run()
+    publisher = AvahiServicePublisher()
+    settings = Gio.Settings('org.sugarlabs.user')
+    nick = settings.get_string('nick')
+    icon_color = settings.get_string('color')
+    msg = "{ typ=presence" + ", " \
+            "name=" + nick + ", " \
+            "color="+icon_color+" }"
+    logging.debug('user %r' %list(settings.keys()))
+    t = str(int(time.time()))
+    publisher.publish(name=t, port=300, domain='local', txt=(msg))
 
 
 class AvahiObject():
@@ -1153,7 +1164,6 @@ class AvahiServiceDiscovery(AvahiObject):
                                        self.__service_removed)
 
     def __service_added(self, interface, protocol, name, typ, domain, flags):
-        logging.debug('Got something avahi!! %s' %(name))
         self._iface.ResolveService(interface, protocol,
                                     name, typ, domain, avahi.PROTO_UNSPEC,
                                     dbus.UInt32(0),

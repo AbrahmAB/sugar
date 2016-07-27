@@ -14,8 +14,6 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 
-import logging
-import time
 from gettext import gettext as _
 
 from gi.repository import GObject
@@ -27,17 +25,14 @@ from jarabe.journal.expandedentry import BaseExpandedEntry
 from jarabe.journal.detailview import BackBar
 from jarabe.journal.listview import ListView
 from jarabe.journal import model
-from jarabe.model.neighborhood import AvahiServicePublisher
 
 from sugar3.graphics.xocolor import XoColor
 from sugar3.graphics import style
-from sugar3.graphics.icon import Icon, EventIcon
+from sugar3.graphics.icon import Icon
 
 _SERVICE_NAME = 'org.laptop.Activity'
 _SERVICE_PATH = '/org/laptop/Activity'
 _SERVICE_INTERFACE = 'org.laptop.Activity'
-
-PROJECT_BUNDLE_ID = 'org.sugarlabs.Project'
 
 
 class ProjectView(Gtk.EventBox, BaseExpandedEntry):
@@ -80,9 +75,6 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
                           pixel_size=style.MEDIUM_ICON_SIZE)
         self._icon.xo_color = XoColor(icon_color)
         self._icon_box.pack_start(self._icon, False, False, 0)
-        buddy_menu = self.create_buddy_menu()
-        self._vbox.pack_start(buddy_menu, True, True, 0)
-        buddy_menu.show_all()
 
     def get_vbox(self):
         return self._vbox
@@ -108,18 +100,9 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
         self._description.get_buffer().set_text(description)
         self._title.set_text(project_metadata.get('title', ''))
 
-    def _add_buddy_button_clicked_cb(self, button, event):
-        logging.debug('Sending invitation to friends around!')
-        publisher = AvahiServicePublisher()
-        settings = Gio.Settings('org.sugarlabs.user')
-        nick = settings.get_string('nick')
-        icon_color = settings.get_string('color')
-        msg = "{ typ=invitation" + ", " \
-                "name=" + nick + ", " \
-                "activity="+PROJECT_BUNDLE_ID + ", " \
-                "title="+self.project_metadata['title']+" }"
-        name = str(int(time.time()))
-        publisher.publish(name=name, port=300, domain='local', txt=(msg))
+    def _add_buddy_button_clicked_cb(self, button):
+        #TODO: TO be implemented
+        pass
 
     def _title_focus_out_event_cb(self, entry, event):
         self._update_entry()
@@ -172,16 +155,3 @@ class ProjectView(Gtk.EventBox, BaseExpandedEntry):
         vbox.pack_start(scrolled_window, True, True, 0)
 
         return vbox
-
-    def create_buddy_menu(self):
-        hbox = Gtk.Box()
-        hbox.props.spacing = style.DEFAULT_SPACING
-        hbox.props.orientation = Gtk.Orientation.HORIZONTAL
-
-        button = EventIcon(icon_name='list-add')
-        button.fill_color = style.COLOR_TOOLBAR_GREY.get_svg()
-        button.set_tooltip(_('Send invitation to friends around!'))
-        button.connect('button-press-event', self._add_buddy_button_clicked_cb)
-
-        hbox.pack_start(button, False, False, 0)
-        return hbox
