@@ -1119,6 +1119,10 @@ def go_avahi():
             "color:"+icon_color+", "\
             "key:"+owner_key +" }"
     logging.debug('user %r' %list(settings.keys()))
+
+    #HACK: Used time as service name.
+    # Buddy names as service can cause ENTRY_GROUP_COLLISION,
+    # Buddy pubkey will be too long for a service name
     t = str(int(time.time()))
     publisher.publish(name=t, port=300, domain='local', txt=(msg))
     return discovery
@@ -1138,7 +1142,6 @@ class AvahiObject(GObject.GObject):
                                 self._bus.get_object(avahi.DBUS_NAME, 
                                                      avahi.DBUS_PATH_SERVER),
                                                      avahi.DBUS_INTERFACE_SERVER)
-
 
 class AvahiServiceDiscovery(AvahiObject):
     '''
@@ -1195,7 +1198,7 @@ class AvahiServiceDiscovery(AvahiObject):
         rev_txt = avahi.txt_array_to_string_array(rtxt)
         #HACK: rev_txt is char list in reverse. Hence reverse it to extract message
         string_txt = (''.join(rev_txt))[::-1]
-        logging.debug('avahi found something name:%s port:%s txt:%s' % (rname, rport, string_txt))
+        logging.debug('avahi found something name:%s port:%s txt:%s add:%s' % (rname, rport, string_txt, raproto))
         kw = {}
         chk = string_txt.split(', ')
         for s in chk:
@@ -1222,7 +1225,9 @@ class AvahiServiceDiscovery(AvahiObject):
 
     def __service_removed(self, rinterface, rprotocol, rname, rtype, 
                             rdomain, rflags):
-        logging.debug('Removing service')
+        logging.debug('avahi Removing service rname:%s' % rname)
+        buddy = self._buddies.pop(rname,None)
+        self.emit('buddy-removed', buddy)
 
     def get_buddies(self):
         return self._buddies.values()
