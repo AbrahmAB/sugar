@@ -1104,6 +1104,8 @@ def get_model():
 import avahi
 from dbus.mainloop.glib import DBusGMainLoop
 from sugar3 import profile
+
+
 #Trying avahi..
 def go_avahi():
     logging.debug('Go for avahi!!')
@@ -1113,18 +1115,17 @@ def go_avahi():
     settings = Gio.Settings('org.sugarlabs.user')
     nick = settings.get_string('nick')
     icon_color = settings.get_string('color')
-    owner_key = profile.get_profile().pubkey
-    msg = "{ typ:presence" + ", " \
-            "nick:" + nick + ", " \
-            "color:"+icon_color+", "\
-            "key:"+owner_key +" }"
-    logging.debug('user %r' %list(settings.keys()))
-
+    owner_key = profile.get_profile().privkey_hash
+    msg = {"typ": "presence",
+           "nick": nick,
+           "color": icon_color}
     #HACK: Used time as service name.
     # Buddy names as service can cause ENTRY_GROUP_COLLISION,
     # Buddy pubkey will be too long for a service name
-    t = str(int(time.time()))
-    publisher.publish(name=t, port=300, domain='local', txt=(msg))
+    txt = avahi.dict_to_txt_array(msg)
+    port = 300
+    publisher.publish(name=owner_key, port=port, domain='local', txt=(txt))
+    logging.debug('Started srevice port: %s with txt: %s' % (port, msg))
     return discovery
 
 
@@ -1133,15 +1134,16 @@ class AvahiObject(GObject.GObject):
     It create the link through dbus to
     communicate with the avahi daemon.
     '''
-    
+
     def __init__(self):
         GObject.GObject.__init__(self)
         self.__loop = DBusGMainLoop()
-        self._bus = dbus.SystemBus(mainloop = self.__loop)
+        self._bus = dbus.SystemBus(mainloop=self.__loop)
         self._iface = dbus.Interface(
-                                self._bus.get_object(avahi.DBUS_NAME, 
-                                                     avahi.DBUS_PATH_SERVER),
-                                                     avahi.DBUS_INTERFACE_SERVER)
+            self._bus.get_object(avahi.DBUS_NAME,
+                                 avahi.DBUS_PATH_SERVER),
+            avahi.DBUS_INTERFACE_SERVER)
+
 
 class AvahiServiceDiscovery(AvahiObject):
     '''
@@ -1172,61 +1174,52 @@ class AvahiServiceDiscovery(AvahiObject):
         flg = dbus.UInt32(0)
         domain = 'local'
         service_type = "_http._tcp"
-        sbrowser = self._bus.get_object(avahi.DBUS_NAME, \
-                            self._iface.ServiceBrowserNew(avahi.IF_UNSPEC, \
-                            avahi.PROTO_INET, service_type, domain, flg))
+        sbrowser = self._bus.get_object(
+            avahi.DBUS_NAME,
+            self._iface.ServiceBrowserNew(avahi.IF_UNSPEC,
+                                          avahi.PROTO_INET,
+                                          service_type,
+                                          domain, flg))
 
         self._siface = dbus.Interface(sbrowser,
                                       avahi.DBUS_INTERFACE_SERVICE_BROWSER)
 
         self._siface.connect_to_signal("ItemNew", self.__service_added)
-        self._siface.connect_to_signal("ItemRemove", 
+        self._siface.connect_to_signal("ItemRemove",
                                        self.__service_removed)
 
     def __service_added(self, interface, protocol, name, typ, domain, flags):
         self._iface.ResolveService(interface, protocol,
-                                    name, typ, domain, avahi.PROTO_UNSPEC,
-                                    dbus.UInt32(0),
-                                    reply_handler = self.__resolve_handler,
-                                    error_handler=self.__resolve_error)
+                                   name, typ, domain, avahi.PROTO_UNSPEC,
+                                   dbus.UInt32(0),
+                                   reply_handler=self.__resolve_handler,
+                                   error_handler=self.__resolve_error)
 
     def __resolve_error(self, msg):
         logging.warning("avahi error : %s " % (msg))
 
     def __resolve_handler(self, riface, rproto, rname, rtype, rdomain, rhost,
-                        raproto, raddr, rport, rtxt, rflags):
-        rev_txt = avahi.txt_array_to_string_array(rtxt)
-        #HACK: rev_txt is char list in reverse. Hence reverse it to extract message
-        string_txt = (''.join(rev_txt))[::-1]
-        logging.debug('avahi found something name:%s port:%s txt:%s add:%s' % (rname, rport, string_txt, raproto))
+                          raproto, raddr, rport, rtxt, rflags):
+        string_txt = avahi.txt_array_to_string_array(rtxt)
         kw = {}
-        chk = string_txt.split(', ')
-        for s in chk:
-            m = s.split('{ ')
-            final_str = m[0]
-            if len(m) == 2:
-                s = m[1]
-
-            m = s.split(' }')
-            final_str = m[0]
-            logging.debug('chk this %r' %final_str)
-
-            key, value = final_str.split(':')
+        kw['key'] = rname
+        for s in string_txt:
+            key, value = s.split('=', 1)
             kw[key] = value
 
-        if kw['key'] == profile.get_profile().pubkey:
+        if kw['key'] == profile.get_profile().privkey_hash:
             return
-        
+        logging.debug('Found buddy name:%s key:%s' % (kw['nick'], kw['key']))
         buddy = BuddyModel(nick=kw['nick'],
                            color=XoColor(kw['color']),
                            key=kw['key'])
         self._buddies[rname] = buddy
-        self.emit('buddy-added',buddy)
+        self.emit('buddy-added', buddy)
 
-    def __service_removed(self, rinterface, rprotocol, rname, rtype, 
-                            rdomain, rflags):
+    def __service_removed(self, rinterface, rprotocol, rname, rtype,
+                          rdomain, rflags):
         logging.debug('avahi Removing service rname:%s' % rname)
-        buddy = self._buddies.pop(rname,None)
+        buddy = self._buddies.pop(rname, None)
         self.emit('buddy-removed', buddy)
 
     def get_buddies(self):
@@ -1241,7 +1234,7 @@ class AvahiServicePublisher(AvahiObject):
     This object represent the publisher for DNSSD Service.
     '''
     group = None
-        
+
     def publish(self, name, port, domain, txt=None):
         '''
         This method publish the service to the avahi daemon.
@@ -1250,20 +1243,19 @@ class AvahiServicePublisher(AvahiObject):
         if txt is None:
             txt = {}
 
-        logging.debug('Starting srevice on port: %s with txt: %s' % (port, txt))
 
         bus = dbus.SystemBus()
         grp = dbus.Interface(
-                bus.get_object(avahi.DBUS_NAME,
-                               self._iface.EntryGroupNew()),
-                avahi.DBUS_INTERFACE_ENTRY_GROUP)
+            bus.get_object(avahi.DBUS_NAME,
+                           self._iface.EntryGroupNew()),
+            avahi.DBUS_INTERFACE_ENTRY_GROUP)
         msg = txt
         try:
             avahi.dict_to_txt_array(txt)
         except:
             pass
         grp.AddService(avahi.IF_UNSPEC, avahi.PROTO_UNSPEC, dbus.UInt32(0),
-                       name, "_http._tcp",domain, "",
+                       name, "_http._tcp", domain, "",
                        dbus.UInt16(port), msg)
         grp.Commit()
         self.group = grp
