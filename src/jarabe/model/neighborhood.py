@@ -1165,6 +1165,7 @@ class AvahiServiceDiscovery(AvahiObject):
         AvahiObject.__init__(self)
         self._buddies = {}
         self._activities = {}
+        self._count_buddy_ips = {}
 
     def run(self):
         '''
@@ -1213,14 +1214,21 @@ class AvahiServiceDiscovery(AvahiObject):
         buddy = BuddyModel(nick=kw['nick'],
                            color=XoColor(kw['color']),
                            key=kw['key'])
-        self._buddies[rname] = buddy
-        self.emit('buddy-added', buddy)
+
+        buddy.props.ips.append(raddr.decode())
+        if not self._buddies.get(rname, None):
+            self._buddies[rname] = buddy
+            self.emit('buddy-added', buddy)
+            self._count_buddy_ips[rname] = 0
+        self._count_buddy_ips[rname] += 1
 
     def __service_removed(self, rinterface, rprotocol, rname, rtype,
                           rdomain, rflags):
-        logging.debug('avahi Removing service rname:%s' % rname)
-        buddy = self._buddies.pop(rname, None)
-        self.emit('buddy-removed', buddy)
+        self._count_buddy_ips[rname] -= 1
+        if not self._count_buddy_ips[rname]:
+            buddy = self._buddies.pop(rname, None)
+            logging.debug('avahi Removing buddy with key:%s' % rname)
+            self.emit('buddy-removed', buddy)
 
     def get_buddies(self):
         return self._buddies.values()

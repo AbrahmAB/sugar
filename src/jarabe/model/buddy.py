@@ -40,8 +40,17 @@ class BaseBuddyModel(GObject.GObject):
         self._color = None
         self._tags = None
         self._current_activity = None
+        self._ips = []
 
         GObject.GObject.__init__(self, **kwargs)
+
+    def get_ips(self):
+        return self._ips
+
+    def set_ips(self, ips):
+        self._ips = ips
+
+    ips = GObject.property(type=object, getter=get_ips, setter=set_ips)
 
     def get_nick(self):
         return self._nick
