@@ -15,6 +15,7 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
+import zmq
 import logging
 from gettext import gettext as _
 
@@ -208,20 +209,26 @@ class BuddyMenu(Palette):
         friends.get_model().remove(self._buddy)
 
     def _invite_friend_cb(self, menuitem):
+        for ip in self._buddy.props.ips:
+            context = zmq.Context()
+            socket = context.socket(zmq.REQ)
+            socket.connect("tcp://"+str(ip)+":5556")
+
         activity = shell.get_model().get_active_activity()
-        service = activity.get_service()
-        if service:
-            try:
-                service.InviteContact(self._buddy.props.account,
-                                      self._buddy.props.contact_id)
-            except dbus.DBusException as e:
-                expected_exceptions = [
-                    'org.freedesktop.DBus.Error.UnknownMethod',
-                    'org.freedesktop.DBus.Python.NotImplementedError']
-                if e.get_dbus_name() in expected_exceptions:
-                    logging.warning('Trying deprecated Activity.Invite')
-                    service.Invite(self._buddy.props.key)
-                else:
-                    raise
-        else:
-            logging.error('Invite failed, activity service not ')
+
+        zmq_fd = socket.getsockopt(zmq.FD)
+        GObject.io_add_watch(zmq_fd,
+                         GObject.IO_IN|GObject.IO_ERR|GObject.IO_HUP,
+                         self.zmq_callback, socket)
+
+        print ("Sending invite to %s" % self._buddy.props.nick)
+        socket.send(b"Invite to"+str(activity))
+
+    def zmq_callback(self, queue, condition, socket):
+        print ('Yeah receivied reply on request :) ')
+
+        while socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
+            message = socket.recv()
+            print("Received reply [ %s ]" % (message))
+
+        return True

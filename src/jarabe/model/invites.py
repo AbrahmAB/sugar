@@ -14,6 +14,7 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+import zmq
 import logging
 from functools import partial
 import json
@@ -292,9 +293,33 @@ class Invites(GObject.GObject):
     def __iter__(self):
         return self._dispatch_operations.values().__iter__()
 
+class ZMQInvites(GObject.GObject):
+    def __init__(self):
+        GObject.GObject.__init__(self)
+
+    def run(self):
+        context = zmq.Context()
+        socket = context.socket(zmq.REP)
+        socket.bind("tcp://*:5556")
+        zmq_fd = socket.getsockopt(zmq.FD)
+        GObject.io_add_watch(zmq_fd,
+                         GObject.IO_IN|GObject.IO_ERR|GObject.IO_HUP,
+                         self.zmq_callback, socket)
+
+    def zmq_callback(self, queue, condition, socket):
+        print ('Yeah receivied something via zmq :) ')
+
+        while socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
+            observed = socket.recv()
+            print ("Received req: %s" % observed)
+            socket.send(b"Hurray!!")
+        return True
+
 
 def get_instance():
     global _instance
+    zmq_invite = ZMQInvites()
+    zmq_invite.run()
     if not _instance:
         _instance = Invites()
     return _instance
