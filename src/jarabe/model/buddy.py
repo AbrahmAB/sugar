@@ -183,11 +183,21 @@ class BuddyModel(BaseBuddyModel):
         self._account = None
         self._contact_id = None
         self._handle = None
+        self._port = None
 
         BaseBuddyModel.__init__(self, **kwargs)
 
     def is_owner(self):
         return False
+
+    def get_port(self):
+        return self._port
+
+    def set_port(self, port):
+        self._port = port
+
+    port = GObject.property(type=str, getter=get_port,
+                               setter=set_port)
 
     def get_account(self):
         return self._account

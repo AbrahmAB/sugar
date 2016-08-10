@@ -1101,6 +1101,7 @@ def get_model():
     return _model
 
 
+import zmq
 import avahi
 from dbus.mainloop.glib import DBusGMainLoop
 from sugar3 import profile
@@ -1116,17 +1117,30 @@ def go_avahi():
     nick = settings.get_string('nick')
     icon_color = settings.get_string('color')
     owner_key = profile.get_profile().privkey_hash
+    socket, sk_port = get_socket_port_pair()
     msg = {"typ": "presence",
            "nick": nick,
-           "color": icon_color}
-    #HACK: Used time as service name.
-    # Buddy names as service can cause ENTRY_GROUP_COLLISION,
-    # Buddy pubkey will be too long for a service name
+           "color": icon_color,
+           "port": sk_port}
     txt = avahi.dict_to_txt_array(msg)
     port = 300
     publisher.publish(name=owner_key, port=port, domain='local', txt=(txt))
     logging.debug('Started srevice port: %s with txt: %s' % (port, msg))
     return discovery
+
+_socket = None
+_port = None
+
+def get_socket_port_pair():
+    global _socket, _port
+    if _socket is None:
+        context = zmq.Context()
+        _socket = context.socket(zmq.REP)
+        _port = _socket.bind_to_random_port("tcp://*",
+                                            min_port=5557,
+                                            max_port=5600,
+                                            max_tries=10)
+    return _socket, _port
 
 
 class AvahiObject(GObject.GObject):
@@ -1214,8 +1228,9 @@ class AvahiServiceDiscovery(AvahiObject):
         buddy = BuddyModel(nick=kw['nick'],
                            color=XoColor(kw['color']),
                            key=kw['key'])
-
+        print "Port buddy is"+ kw['port']
         buddy.props.ips.append(raddr.decode())
+        buddy.props.port = kw['port']
         if not self._buddies.get(rname, None):
             self._buddies[rname] = buddy
             self.emit('buddy-added', buddy)

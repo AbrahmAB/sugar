@@ -298,9 +298,7 @@ class ZMQInvites(GObject.GObject):
         GObject.GObject.__init__(self)
 
     def run(self):
-        context = zmq.Context()
-        socket = context.socket(zmq.REP)
-        socket.bind("tcp://*:5556")
+        socket, port = neighborhood.get_socket_port_pair()
         zmq_fd = socket.getsockopt(zmq.FD)
         GObject.io_add_watch(zmq_fd,
                          GObject.IO_IN|GObject.IO_ERR|GObject.IO_HUP,
@@ -318,8 +316,9 @@ class ZMQInvites(GObject.GObject):
 
 def get_instance():
     global _instance
-    zmq_invite = ZMQInvites()
-    zmq_invite.run()
+    
     if not _instance:
+        zmq_invite = ZMQInvites()
+        zmq_invite.run()
         _instance = Invites()
     return _instance

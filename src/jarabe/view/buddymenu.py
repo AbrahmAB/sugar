@@ -209,26 +209,7 @@ class BuddyMenu(Palette):
         friends.get_model().remove(self._buddy)
 
     def _invite_friend_cb(self, menuitem):
-        for ip in self._buddy.props.ips:
-            context = zmq.Context()
-            socket = context.socket(zmq.REQ)
-            socket.connect("tcp://"+str(ip)+":5556")
-
         activity = shell.get_model().get_active_activity()
-
-        zmq_fd = socket.getsockopt(zmq.FD)
-        GObject.io_add_watch(zmq_fd,
-                         GObject.IO_IN|GObject.IO_ERR|GObject.IO_HUP,
-                         self.zmq_callback, socket)
-
-        print ("Sending invite to %s" % self._buddy.props.nick)
-        socket.send(b"Invite to"+str(activity))
-
-    def zmq_callback(self, queue, condition, socket):
-        print ('Yeah receivied reply on request :) ')
-
-        while socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
-            message = socket.recv()
-            print("Received reply [ %s ]" % (message))
-
-        return True
+        service = activity.get_service()
+        service.InviteContact((self._buddy.props.ips),
+                              str(self._buddy.props.port))
