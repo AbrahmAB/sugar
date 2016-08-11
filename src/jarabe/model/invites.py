@@ -293,9 +293,43 @@ class Invites(GObject.GObject):
     def __iter__(self):
         return self._dispatch_operations.values().__iter__()
 
+
+class ZMQActivityInvite(GObject.GObject):
+    def __init__(self, activity_properties, socket):
+        self._bundle_id = activity_properties['bundle_id']
+        self._title = activity_properties['title']
+        self._color = XoColor(activity_properties['color'].encode())
+        self._socket = socket
+
+    def get_bundle_id(self):
+        return self._bundle_id
+
+    def get_activity_title(self):
+        return self._title
+
+    def get_color(self):
+        return self._color
+
+    def get_socket(self):
+        return self._socket
+
+    def join(self):
+        self._socket.send('I am willing to join the %s' % str(self._bundle_id))
+
+    def reject(self):
+        self._socket.send('Invite to %s rejected' % str(self._bundle_id))
+
+
 class ZMQInvites(GObject.GObject):
+    __gsignals__ = {
+        'invite-added': (GObject.SignalFlags.RUN_FIRST, None,
+                         ([object])),
+        'invite-removed': (GObject.SignalFlags.RUN_FIRST, None,
+                           ([object])),
+    }
     def __init__(self):
         GObject.GObject.__init__(self)
+        self._invites_received = []
 
     def run(self):
         socket, port = neighborhood.get_socket_port_pair()
@@ -309,9 +343,20 @@ class ZMQInvites(GObject.GObject):
 
         while socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
             observed = socket.recv()
-            print ("Received req: %s" % observed)
-            socket.send(b"Hurray!!")
+            received_dict = json.loads(observed)
+            print ("Received %s" % received_dict.get('color'))
+            received_dict.pop('type')
+            invite = ZMQActivityInvite(received_dict, socket)
+            self._invites_received.append(invite)
+            self.emit('invite-added',invite)
         return True
+
+    def remove_invite(self, invite):
+        self._invites_received.remove(invite)
+        self.emit('invite-removed', invite)
+
+    def __iter__(self):
+        return self._invites_received.__iter__()
 
 
 def get_instance():
@@ -320,5 +365,5 @@ def get_instance():
     if not _instance:
         zmq_invite = ZMQInvites()
         zmq_invite.run()
-        _instance = Invites()
-    return _instance
+        #_instance = Invites()
+    return zmq_invite
