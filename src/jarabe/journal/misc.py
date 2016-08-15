@@ -16,6 +16,7 @@
 
 import logging
 import time
+import json
 import os
 import hashlib
 from gettext import gettext as _
@@ -260,9 +261,12 @@ def resume(metadata, bundle_id=None, alert_window=None,
 
 
 def launch(bundle, activity_id=None, object_id=None, uri=None, color=None,
-           invited=False, alert_window=None):
+           invited=False, alert_window=None, activity_prop=None):
 
     bundle_id = bundle.get_bundle_id()
+    if activity_prop:
+        activity_id = activity_prop['activity_id']
+        color = XoColor(activity_prop['icon-color'])
 
     if activity_id is None or not activity_id:
         activity_id = activityfactory.create_activity_id()
@@ -307,12 +311,14 @@ def launch(bundle, activity_id=None, object_id=None, uri=None, color=None,
 
     if color is None:
         color = profile.get_color()
-
+    invite_prop = (activity_prop)
+    logging.debug('dumped invite_prop %s' % invite_prop)
     launcher.add_launcher(activity_id, bundle.get_icon(), color)
     activity_handle = ActivityHandle(activity_id=activity_id,
                                      object_id=object_id,
                                      uri=uri,
-                                     invited=invited)
+                                     invited=invited,
+                                     invite_prop=invite_prop)
     activityfactory.create(bundle, activity_handle)
 
 

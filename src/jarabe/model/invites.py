@@ -296,10 +296,11 @@ class Invites(GObject.GObject):
 
 class ZMQActivityInvite(GObject.GObject):
     def __init__(self, activity_properties, socket):
-        self._bundle_id = activity_properties['bundle_id']
+        self._bundle_id = activity_properties['bundle_id'].encode()
         self._title = activity_properties['title']
-        self._color = XoColor(activity_properties['color'].encode())
+        self._color = (activity_properties['icon-color'].encode())
         self._socket = socket
+        self._activity_properties = activity_properties
 
     def get_bundle_id(self):
         return self._bundle_id
@@ -308,16 +309,33 @@ class ZMQActivityInvite(GObject.GObject):
         return self._title
 
     def get_color(self):
-        return self._color
+        return XoColor(self._color)
 
     def get_socket(self):
         return self._socket
 
     def join(self):
-        self._socket.send('I am willing to join the %s' % str(self._bundle_id))
+        registry = bundleregistry.get_registry()
+        bundle_id = self.get_bundle_id()
+        bundle = registry.get_bundle(bundle_id)
+
+        if bundle is None:
+            logging.debug('No such bundle found!')
+            self._socket.send('Rejected!')
+
+        logging.debug('activity_properties %s' % self._activity_properties)
+        misc.launch(bundle, invited=True,
+                    activity_prop=activity_properties)
+        join_msg = {'type': 'join',
+                    'activity_id': self._activity_properties['activity_id']}
+        txt = json.dumps(join_msg)
+        self._socket.send(txt)
 
     def reject(self):
-        self._socket.send('Invite to %s rejected' % str(self._bundle_id))
+        reject_msg = {'type': 'reject',
+                      'activity_id': self._activity_properties['activity_id']}
+        txt = json.dumps(join_msg)
+        self._socket.send(txt)
 
 
 class ZMQInvites(GObject.GObject):
@@ -344,7 +362,7 @@ class ZMQInvites(GObject.GObject):
         while socket.getsockopt(zmq.EVENTS) & zmq.POLLIN:
             observed = socket.recv()
             received_dict = json.loads(observed)
-            print ("Received %s" % received_dict.get('color'))
+            print ("Received %s" % received_dict)
             received_dict.pop('type')
             invite = ZMQActivityInvite(received_dict, socket)
             self._invites_received.append(invite)
