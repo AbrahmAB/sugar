@@ -68,6 +68,8 @@ will be very slow in returning these queries, so just be patient.
 """
 
 _model = None
+_discovery = None
+_publisher = None
 
 
 class ActivityModel(GObject.GObject):
@@ -1106,28 +1108,6 @@ import avahi
 from dbus.mainloop.glib import DBusGMainLoop
 from sugar3 import profile
 
-
-#Trying avahi..
-def go_avahi():
-    logging.debug('Go for avahi!!')
-    discovery = AvahiServiceDiscovery()
-    discovery.run()
-    publisher = AvahiServicePublisher()
-    settings = Gio.Settings('org.sugarlabs.user')
-    nick = settings.get_string('nick')
-    icon_color = settings.get_string('color')
-    owner_key = profile.get_profile().privkey_hash
-    socket, sk_port = get_socket_port_pair()
-    msg = {"typ": "presence",
-           "nick": nick,
-           "color": icon_color,
-           "port": sk_port}
-    txt = avahi.dict_to_txt_array(msg)
-    port = 300
-    publisher.publish(name=owner_key, port=port, domain='local', txt=(txt))
-    logging.debug('Started srevice port: %s with txt: %s' % (port, msg))
-    return discovery
-
 _socket = None
 _port = None
 
@@ -1232,9 +1212,11 @@ class AvahiServiceDiscovery(AvahiObject):
         buddy.props.ips.append(raddr.decode())
         buddy.props.port = kw['port']
         if not self._buddies.get(rname, None):
+            print "Added buddy!!"
             self._buddies[rname] = buddy
             self.emit('buddy-added', buddy)
             self._count_buddy_ips[rname] = 0
+            print "Buddies now" + str(self._buddies)
         self._count_buddy_ips[rname] += 1
 
     def __service_removed(self, rinterface, rprotocol, rname, rtype,
@@ -1248,6 +1230,13 @@ class AvahiServiceDiscovery(AvahiObject):
     def get_buddies(self):
         return self._buddies.values()
 
+    def get_buddy_by_key(self, key):
+        print "Buddies are" + str(self._buddies)
+        for buddy in self._buddies.values():
+            if buddy.key == key:
+                return buddy
+        return None
+
     def get_activities(self):
         return self._activities.values()
 
@@ -1257,8 +1246,25 @@ class AvahiServicePublisher(AvahiObject):
     This object represent the publisher for DNSSD Service.
     '''
     group = None
+    def __init__(self):
+        AvahiObject.__init__(self)
 
-    def publish(self, name, port, domain, txt=None):
+    def publish(self):
+        settings = Gio.Settings('org.sugarlabs.user')
+        nick = settings.get_string('nick')
+        icon_color = settings.get_string('color')
+        owner_key = profile.get_profile().privkey_hash
+        socket, sk_port = get_socket_port_pair()
+        msg = {"typ": "presence",
+               "nick": nick,
+               "color": icon_color,
+               "port": sk_port}
+        txt = avahi.dict_to_txt_array(msg)
+        port = 300
+        name=owner_key
+        domain='local'
+        logging.debug('Started srevice port: %s with txt: %s' % (port, msg))
+    
         '''
         This method publish the service to the avahi daemon.
         '''
@@ -1290,3 +1296,16 @@ class AvahiServicePublisher(AvahiObject):
         if self.group is not None:
             self.group.Reset()
             self.group = None
+
+
+#Trying avahi..
+def go_avahi():
+    global _discovery, _publisher
+    logging.debug('Go for avahi!! %s %s' %(_discovery, _publisher))
+    if _discovery is None or _publisher is  None:
+        logging.debug('Go for avahi again!!')
+        _discovery = AvahiServiceDiscovery()
+        _discovery.run()
+        #HACK: need to run the discovery to get the buddies list again 
+        _publisher = AvahiServicePublisher()
+    return _discovery, _publisher

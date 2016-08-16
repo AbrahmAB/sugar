@@ -375,7 +375,8 @@ class MeshBox(ViewContainer):
         self._adhoc_manager = None
         self._adhoc_networks = []
 
-        self._model = neighborhood.go_avahi()
+        self._model, self._publisher = neighborhood.go_avahi()
+        self._publisher.publish()
         self._buddies = {}
         self._activities = {}
         self._mesh = []

@@ -325,14 +325,14 @@ class ZMQActivityInvite(GObject.GObject):
 
         logging.debug('activity_properties %s' % self._activity_properties)
         misc.launch(bundle, invited=True,
-                    activity_prop=activity_properties)
-        join_msg = {'type': 'join',
+                    activity_prop=self._activity_properties)
+        join_msg = {'response': True,
                     'activity_id': self._activity_properties['activity_id']}
         txt = json.dumps(join_msg)
         self._socket.send(txt)
 
     def reject(self):
-        reject_msg = {'type': 'reject',
+        reject_msg = {'response': False,
                       'activity_id': self._activity_properties['activity_id']}
         txt = json.dumps(join_msg)
         self._socket.send(txt)
@@ -364,6 +364,10 @@ class ZMQInvites(GObject.GObject):
             received_dict = json.loads(observed)
             print ("Received %s" % received_dict)
             received_dict.pop('type')
+            avahi_discovery, avahi_publisher = neighborhood.go_avahi()
+            buddy = avahi_discovery.get_buddy_by_key(received_dict['leader_key'])
+            ips = buddy.props.ips
+            received_dict['leader_ips'] = ips
             invite = ZMQActivityInvite(received_dict, socket)
             self._invites_received.append(invite)
             self.emit('invite-added',invite)
