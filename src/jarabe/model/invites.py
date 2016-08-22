@@ -363,14 +363,22 @@ class ZMQInvites(GObject.GObject):
             observed = socket.recv()
             received_dict = json.loads(observed)
             print ("Received %s" % received_dict)
-            received_dict.pop('type')
+            type_msg = received_dict.pop('type')
             avahi_discovery, avahi_publisher = neighborhood.go_avahi()
             buddy = avahi_discovery.get_buddy_by_key(received_dict['leader_key'])
             ips = buddy.props.ips
             received_dict['leader_ips'] = ips
-            invite = ZMQActivityInvite(received_dict, socket)
-            self._invites_received.append(invite)
-            self.emit('invite-added',invite)
+            if type_msg == 'invite':
+                invite = ZMQActivityInvite(received_dict, socket)
+                self._invites_received.append(invite)
+                self.emit('invite-added',invite)
+            elif type_msg == 'update':
+                print "Got an activity update!"
+                avahi_discovery.add_activity_update(received_dict)
+                update_msg = {'response': True,
+                              'activity_id': received_dict['activity_id']}
+                txt = json.dumps(update_msg)
+                socket.send(txt)
         return True
 
     def remove_invite(self, invite):

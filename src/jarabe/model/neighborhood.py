@@ -1160,6 +1160,7 @@ class AvahiServiceDiscovery(AvahiObject):
         self._buddies = {}
         self._activities = {}
         self._count_buddy_ips = {}
+        self._activities_update = {}
 
     def run(self):
         '''
@@ -1239,6 +1240,14 @@ class AvahiServiceDiscovery(AvahiObject):
 
     def get_activities(self):
         return self._activities.values()
+
+    def add_activity_update(self, activity_prop):
+        activity_id = activity_prop['activity_id']
+        self._activities_update[activity_id] = activity_prop
+
+    def get_activity_update(self, activity_id):
+        activity_prop = self._activities_update.pop(activity_id, None)
+        return activity_prop
 
 
 class AvahiServicePublisher(AvahiObject):

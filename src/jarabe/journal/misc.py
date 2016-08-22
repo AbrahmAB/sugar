@@ -45,6 +45,7 @@ from jarabe.model import bundleregistry, shell
 from jarabe.journal.journalentrybundle import JournalEntryBundle
 from jarabe.journal import model
 from jarabe.journal import journalwindow
+from jarabe.model import neighborhood
 
 PROJECT_BUNDLE_ID = 'org.sugarlabs.Project'
 
@@ -214,10 +215,13 @@ def resume(metadata, bundle_id=None, alert_window=None,
     # These are set later, and used in the following functions.
     bundle = None
     activity_id = None
+    activity_prop = None
+    invited = False
 
     def launch_activity(object_id):
         launch(bundle, activity_id=activity_id, object_id=object_id,
-               color=get_icon_color(metadata), alert_window=alert_window)
+               color=get_icon_color(metadata), alert_window=alert_window,
+               activity_prop=activity_prop, invited=invited)
 
     def ready_callback(metadata, source, destination):
         launch_activity(destination)
@@ -242,7 +246,11 @@ def resume(metadata, bundle_id=None, alert_window=None,
 
     # Otherwise we are launching a regular journal entry
     activity_id = metadata.get('activity_id', '')
-
+    avahi_discovery, avahi_publisher = neighborhood.go_avahi()
+    activity_prop = avahi_discovery.get_activity_update(activity_id)
+    if activity_prop:
+        invited = True
+    print "Just got object of avahi discovery"
     if bundle_id is None:
         activities = get_activities(metadata)
         if not activities:
