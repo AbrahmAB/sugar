@@ -1228,6 +1228,10 @@ class AvahiServiceDiscovery(AvahiObject):
             logging.debug('avahi Removing buddy with key:%s' % rname)
             self.emit('buddy-removed', buddy)
 
+            for activity_id, prop in self._activities_update.items():
+                if prop['leader_key'] == rname:
+                    self._activities_update.pop(activity_id)
+
     def get_buddies(self):
         return self._buddies.values()
 

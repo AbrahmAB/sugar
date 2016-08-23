@@ -250,7 +250,7 @@ def resume(metadata, bundle_id=None, alert_window=None,
     activity_prop = avahi_discovery.get_activity_update(activity_id)
     if activity_prop:
         invited = True
-    print "Just got object of avahi discovery"
+        print "Just got object of avahi discovery"
     if bundle_id is None:
         activities = get_activities(metadata)
         if not activities:
