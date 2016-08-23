@@ -1227,10 +1227,7 @@ class AvahiServiceDiscovery(AvahiObject):
             buddy = self._buddies.pop(rname, None)
             logging.debug('avahi Removing buddy with key:%s' % rname)
             self.emit('buddy-removed', buddy)
-
-            for activity_id, prop in self._activities_update.items():
-                if prop['leader_key'] == rname:
-                    self._activities_update.pop(activity_id)
+            self.remove_activity_update(rname)
 
     def get_buddies(self):
         return self._buddies.values()
@@ -1252,6 +1249,11 @@ class AvahiServiceDiscovery(AvahiObject):
     def get_activity_update(self, activity_id):
         activity_prop = self._activities_update.pop(activity_id, None)
         return activity_prop
+
+    def remove_activity_update(self, leader_key):
+        for activity_id, prop in self._activities_update.items():
+            if prop['leader_key'] == leader_key:
+                self._activities_update.pop(activity_id)
 
 
 class AvahiServicePublisher(AvahiObject):

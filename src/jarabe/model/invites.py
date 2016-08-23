@@ -379,6 +379,10 @@ class ZMQInvites(GObject.GObject):
                               'activity_id': received_dict['activity_id']}
                 txt = json.dumps(update_msg)
                 socket.send(txt)
+
+            elif type_msg == 'leader_offline':
+                print "Activity to be removed"
+                avahi_discovery.remove_activity_update(received_dict['leader_key'])
         return True
 
     def remove_invite(self, invite):
